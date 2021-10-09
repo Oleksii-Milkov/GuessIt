@@ -1,20 +1,26 @@
 package com.example.android.guesstheword.screens.game
 
+import android.os.Build
 import android.os.Bundle
-import android.text.format.DateUtils
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.getSystemService
 import androidx.databinding.DataBindingUtil
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
 import com.example.android.guesstheword.R
 import com.example.android.guesstheword.databinding.GameFragmentBinding
 
 class GameFragment : Fragment() {
 
-    private val viewModel: GameViewModel by activityViewModels()
+    private lateinit var viewModel: GameViewModel
     private lateinit var binding: GameFragmentBinding
 
     override fun onCreateView(
@@ -25,46 +31,44 @@ class GameFragment : Fragment() {
         binding = DataBindingUtil.inflate(inflater,
             R.layout.game_fragment,
             container,
-            false
+            false,
         )
 
-        binding.correctButton.setOnClickListener {
-            viewModel.onCorrect()
-        }
+        viewModel = ViewModelProvider(this).get(GameViewModel::class.java)
 
-        binding.skipButton.setOnClickListener {
-            viewModel.onSkip()
-        }
-
-        return binding.root
-    }
-
-    private fun gameFinished() {
-        val action = GameFragmentDirections.actionGameToScore(viewModel.score.value ?: 0)
-        findNavController().navigate(action)
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        viewModel.score.observe(viewLifecycleOwner, { newScore ->
-            binding.scoreText.text = newScore.toString()
-        })
-
-        viewModel.word.observe(viewLifecycleOwner, { newWord ->
-            binding.wordText.text = newWord
-        })
+        binding.gameViewModel = viewModel
+        binding.lifecycleOwner = this
 
         viewModel.eventGameFinished.observe(viewLifecycleOwner, { hasFinished ->
             if (hasFinished) {
-                gameFinished()
+                val action = GameFragmentDirections.actionGameToScore(viewModel.score.value ?: 0)
+                findNavController().navigate(action)
                 viewModel.onGameFinishComplete()
             }
         })
 
-        viewModel.currentTime.observe(viewLifecycleOwner, { newTime ->
-            binding.timerText.text = DateUtils.formatElapsedTime(newTime)
+        viewModel.eventBuzz.observe(viewLifecycleOwner, Observer { buzzType ->
+            if (buzzType != GameViewModel.BuzzType.NO_BUZZ) {
+                buzz(buzzType.pattern)
+                viewModel.onBuzzComplete()
+            }
         })
+
+
+        return binding.root
+    }
+
+    private fun buzz(pattern: LongArray) {
+        val buzzer = activity?.getSystemService<Vibrator>()
+
+        buzzer?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                buzzer.vibrate(VibrationEffect.createWaveform(pattern, -1))
+            } else {
+                //deprecated in API 26
+                buzzer.vibrate(pattern, -1)
+            }
+        }
     }
 
 }
